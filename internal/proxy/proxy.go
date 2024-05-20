@@ -2,42 +2,35 @@ package proxy
 
 import (
 	"fmt"
+	"github.com/go-redsync/redsync/v4"
+	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
+	"github.com/redis/go-redis/v9"
 	"io"
 	"log"
 	"net/http"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 )
 
 type proxy struct {
-	lock      *sync.Mutex
-	locked    *atomic.Bool
-	lockTimer *time.Timer
+	mutex *redsync.Mutex
 }
 
 func NewProxy() http.Handler {
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	rs := redsync.New(goredis.NewPool(client))
+	mutex := rs.NewMutex("feather-publishing", redsync.WithExpiry(10*time.Second))
 	return &proxy{
-		lock:      &sync.Mutex{},
-		lockTimer: time.NewTimer(0),
-		locked:    &atomic.Bool{},
+		mutex: mutex,
 	}
 }
 
 func (p *proxy) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	//fmt.Println(request.Method + " " + request.URL.String())
 	if request.Method == http.MethodGet && strings.HasSuffix(request.URL.String(), "maven-metadata.xml") {
-		p.lock.Lock()
-		p.locked.Store(true)
-		p.lockTimer.Reset(20 * time.Second)
-		go func() {
-			<-p.lockTimer.C
-			if p.locked.Load() {
-				p.locked.Store(false)
-				p.lock.Unlock()
-			}
-		}()
+		_ = p.mutex.Lock()
 	}
 	client := &http.Client{}
 	// TODO host as env
@@ -63,12 +56,6 @@ func (p *proxy) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	_, _ = io.Copy(writer, resp.Body)
 	// TODO time based unlock!
 	if request.Method == http.MethodPut && strings.HasSuffix(request.URL.String(), "maven-metadata.xml.sha512") {
-		if !p.lockTimer.Stop() {
-			<-p.lockTimer.C
-		}
-		if p.locked.Load() {
-			p.locked.Store(false)
-			p.lock.Unlock()
-		}
+		_, _ = p.mutex.Unlock()
 	}
 }
