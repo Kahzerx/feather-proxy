@@ -62,3 +62,4 @@ done
 env CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat go build -ldflags "$LDFLAGS" -gcflags "$GCFLAGS" -o proxy_linux_mipsle feather-proxy/cmd
 env CGO_ENABLED=0 GOOS=linux GOARCH=mips GOMIPS=softfloat go build -ldflags "$LDFLAGS" -gcflags "$GCFLAGS" -o proxy_linux_mips feather-proxy/cmd
 if $UPX; then upx -9 *;fi
+exit 0
