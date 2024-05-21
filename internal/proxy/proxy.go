@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
 	"github.com/go-redsync/redsync/v4"
 	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
@@ -8,22 +9,58 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
 
+type mavenConfig struct {
+	scheme string
+	host   string
+	port   string
+}
+
 type proxy struct {
-	mutex *redsync.Mutex
+	mutex  *redsync.Mutex
+	config mavenConfig
 }
 
 func NewProxy() http.Handler {
+	redisHost := os.Getenv("REDIS_HOST")
+	if redisHost == "" {
+		redisHost = "127.0.0.1"
+	}
+	redisPort := os.Getenv("REDIS_PORT")
+	if redisPort == "" {
+		redisPort = "6379"
+	}
 	client := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
 	})
+	if client.Ping(context.Background()).Err() != nil {
+		panic("Unable to connect to redis")
+	}
 	rs := redsync.New(goredis.NewPool(client))
 	mutex := rs.NewMutex("feather-publishing", redsync.WithExpiry(10*time.Second))
+	mavenScheme := os.Getenv("MAVEN_SCHEME")
+	if mavenScheme == "" {
+		mavenScheme = "http"
+	}
+	mavenHost := os.Getenv("MAVEN_HOST")
+	if mavenHost == "" {
+		mavenHost = "127.0.0.1"
+	}
+	mavenPort := os.Getenv("MAVEN_PORT")
+	if mavenPort == "" {
+		mavenPort = "80"
+	}
 	return &proxy{
 		mutex: mutex,
+		config: mavenConfig{
+			scheme: mavenScheme,
+			host:   mavenHost,
+			port:   mavenPort,
+		},
 	}
 }
 
@@ -33,14 +70,12 @@ func (p *proxy) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		_ = p.mutex.Lock()
 	}
 	client := &http.Client{}
-	// TODO host as env
-	request.URL.Host = "0.0.0.0:80"
-	request.Host = "0.0.0.0:80"
-	// TODO schema as env
-	request.URL.Scheme = "http"
+	request.URL.Host = fmt.Sprintf("%s:%s", p.config.host, p.config.port)
+	request.Host = fmt.Sprintf("%s:%s", p.config.host, p.config.port)
+	request.URL.Scheme = p.config.scheme
 	request.RequestURI = ""
 	// Comment if reverse proxy already does the redirect
-	request.URL.Path = "/releases" + request.URL.Path
+	// request.URL.Path = "/releases" + request.URL.Path
 	resp, err := client.Do(request)
 	if err != nil {
 		http.Error(writer, "Server Error", http.StatusInternalServerError)
@@ -54,7 +89,6 @@ func (p *proxy) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	}(resp.Body)
 	writer.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(writer, resp.Body)
-	// TODO time based unlock!
 	if request.Method == http.MethodPut && strings.HasSuffix(request.URL.String(), "maven-metadata.xml.sha512") {
 		_, _ = p.mutex.Unlock()
 	}

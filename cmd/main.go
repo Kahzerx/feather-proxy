@@ -14,15 +14,17 @@ import (
 )
 
 func main() {
-	// TODO port as env
-	port := 8000
+	apiPort := os.Getenv("API_PORT")
+	if apiPort == "" {
+		apiPort = "8000"
+	}
 	log := logger.NewColorLogger("API")
 	server := &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", port),
+		Addr:    fmt.Sprintf("0.0.0.0:%s", apiPort),
 		Handler: proxy.NewProxy(),
 	}
 	go func() {
-		log.Info("listening on port: %d", port)
+		log.Info("listening on port: %s", apiPort)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Critical("Failed to start the server %s", err.Error())
 		}
