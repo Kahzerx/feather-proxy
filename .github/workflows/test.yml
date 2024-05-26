@@ -29,5 +29,5 @@ jobs:
       - name: Run tests
         run: go test ./...
         env:
-          REDIS_HOST: redis
+          REDIS_HOST: localhost
           REDIS_PORT: 6379
