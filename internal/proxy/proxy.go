@@ -3,13 +3,13 @@ package proxy
 import (
 	"context"
 	"feather-proxy/internal/database"
+	"feather-proxy/internal/repository"
 	"fmt"
 	"github.com/go-redsync/redsync/v4"
 	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
@@ -32,24 +32,13 @@ func NewProxy() http.Handler {
 	}
 	rs := redsync.New(goredis.NewPool(client))
 	mutex := rs.NewMutex("feather-publishing", redsync.WithExpiry(10*time.Second))
-	mavenScheme := os.Getenv("MAVEN_SCHEME")
-	if mavenScheme == "" {
-		mavenScheme = "http"
-	}
-	mavenHost := os.Getenv("MAVEN_HOST")
-	if mavenHost == "" {
-		mavenHost = "127.0.0.1"
-	}
-	mavenPort := os.Getenv("MAVEN_PORT")
-	if mavenPort == "" {
-		mavenPort = "80"
-	}
+	mvnConfig := repository.NewMavenConfig()
 	return &proxy{
 		mutex: mutex,
 		config: mavenConfig{
-			scheme: mavenScheme,
-			host:   mavenHost,
-			port:   mavenPort,
+			scheme: mvnConfig.Scheme,
+			host:   mvnConfig.Host,
+			port:   mvnConfig.Port,
 		},
 	}
 }

@@ -4,6 +4,10 @@ jobs:
   proxy-test:
     runs-on: ubuntu-latest
     services:
+      reposilite:
+        image: dzikoysk/reposilite
+        ports:
+          - 80:8080
       redis:
         image: redis
         options: >-
@@ -30,4 +34,7 @@ jobs:
         run: go test ./...
         env:
           REDIS_HOST: localhost
-          REDIS_PORT: 6379
+          REDIS_PORT: 127.0.0.1
+          MAVEN_SCHEME: http
+          MAVEN_HOST: 127.0.0.1
+          MAVEN_PORT: 80
