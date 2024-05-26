@@ -2,10 +2,10 @@ package proxy
 
 import (
 	"context"
+	"feather-proxy/internal/database"
 	"fmt"
 	"github.com/go-redsync/redsync/v4"
 	"github.com/go-redsync/redsync/v4/redis/goredis/v9"
-	"github.com/redis/go-redis/v9"
 	"io"
 	"log"
 	"net/http"
@@ -26,17 +26,7 @@ type proxy struct {
 }
 
 func NewProxy() http.Handler {
-	redisHost := os.Getenv("REDIS_HOST")
-	if redisHost == "" {
-		redisHost = "127.0.0.1"
-	}
-	redisPort := os.Getenv("REDIS_PORT")
-	if redisPort == "" {
-		redisPort = "6379"
-	}
-	client := redis.NewClient(&redis.Options{
-		Addr: fmt.Sprintf("%s:%s", redisHost, redisPort),
-	})
+	client := database.NewRedisClient()
 	if client.Ping(context.Background()).Err() != nil {
 		panic("Unable to connect to redis")
 	}
